@@ -6,7 +6,8 @@ body:
   - type: markdown
     attributes:
       value: |
-        感谢分享你的测试结果！填写后我们会整理进兼容清单。
+        感谢分享！填得越细，兼容清单越有用。
+        比如“M2 Pro 16G 能跑 / M1 8G 闪退”这种信息非常值钱。
 
   - type: dropdown
     id: type
@@ -22,7 +23,7 @@ body:
     id: name
     attributes:
       label: 软件名称
-      placeholder: 例：微信 / WeChat
+      placeholder: 例：微信 / WeChat、原神、植物大战僵尸
     validations:
       required: true
 
@@ -30,19 +31,63 @@ body:
     id: app_version
     attributes:
       label: 软件版本
-      placeholder: 例：8.0.50
+      placeholder: 例：8.0.50 / 最新版
     validations:
       required: false
 
   - type: dropdown
-    id: chip
+    id: chip_family
     attributes:
-      label: Mac 芯片
+      label: 芯片系列
       options:
         - M1
         - M2
         - M3
         - M4
+    validations:
+      required: true
+
+  - type: dropdown
+    id: chip_variant
+    attributes:
+      label: 芯片后缀
+      description: 没有就选 标准版
+      options:
+        - 标准版
+        - Pro
+        - Max
+        - Pro Max
+        - 其他（评论里说明）
+    validations:
+      required: true
+
+  - type: dropdown
+    id: model
+    attributes:
+      label: 机型
+      options:
+        - Mac mini
+        - MacBook Air
+        - MacBook Pro
+        - iMac
+        - Mac Studio
+        - Mac Pro
+        - 其他（评论里说明）
+    validations:
+      required: true
+
+  - type: dropdown
+    id: memory
+    attributes:
+      label: 内存
+      options:
+        - 8G
+        - 16G
+        - 24G
+        - 32G
+        - ">= 48G"
+        - ">= 64G"
+        - 其他（评论里说明）
     validations:
       required: true
 
@@ -74,10 +119,17 @@ body:
       required: true
 
   - type: textarea
+    id: perf
+    attributes:
+      label: 性能 / 画质 / 帧率（可选）
+      placeholder: 例：中画质 50 帧，内存占用 6G；或“启动 10 秒，偶尔卡顿”
+    validations:
+      required: false
+
+  - type: textarea
     id: notes
     attributes:
       label: 补充说明
-      description: 帧率、卡顿、闪退、画面异常、对比其他方案等
-      placeholder: 例：中画质 50 帧，偶发卡顿；相比 Crossover 省心
+      placeholder: 闪退点、报错信息、和 Crossover / Parallels 的对比、是否触发账号风控等
     validations:
       required: false
