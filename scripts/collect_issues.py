@@ -1,0 +1,175 @@
+#!/usr/bin/env python3
+"""
+collect_issues.py - 从 GitHub Issues 汇总兼容报告到 COMPAT.md
+用法：
+  python3 scripts/collect_issues.py              # 自动通过 gh CLI 拉取
+  python3 scripts/collect_issues.py --input issues.json  # 从本地 JSON 读取
+"""
+
+import json
+import subprocess
+import sys
+import os
+from datetime import datetime
+
+# ========= 配置 =========
+REPO = "fallout1018/mac-run-apk-exe"
+OUTPUT = "COMPAT.md"
+LABEL = "compatibility"
+
+
+def fetch_issues():
+    """通过 gh CLI 拉取 issues"""
+    cmd = [
+        "gh", "issue", "list",
+        "--repo", REPO,
+        "--label", LABEL,
+        "--state", "all",
+        "--limit", "500",
+        "--json", "number,title,body,state,createdAt,author,labels,url"
+    ]
+    result = subprocess.run(cmd, capture_output=True, text=True)
+    if result.returncode != 0:
+        print(f"❌ gh CLI 执行失败：{result.stderr}")
+        sys.exit(1)
+    return json.loads(result.stdout)
+
+
+def parse_body(body):
+    """解析 Issue 表单内容（### 字段名 换行 值）"""
+    fields = {}
+    lines = body.split("\n")
+    current_field = None
+    for line in lines:
+        line = line.strip()
+        if line.startswith("### "):
+            current_field = line[4:].strip()
+            fields[current_field] = ""
+        elif current_field and line and not line.startswith("<!--"):
+            fields[current_field] = line
+    return fields
+
+
+def classify_status(status):
+    if "✅" in status or status == "working":
+        return "working"
+    elif "🔶" in status or status == "partial":
+        return "partial"
+    elif "❌" in status or status == "broken":
+        return "broken"
+    return "unknown"
+
+
+def build_row(entry):
+    """构建一行 Markdown 表格"""
+    return f"| {entry.get('name', '?')} | {entry.get('type', '?')} | {entry.get('chip', '?')} | {entry.get('memory', '?')} | {entry.get('model', '?')} | {entry.get('yyb_version', '?')} | {entry.get('notes', '-')} | @{entry.get('author', '?')} |"
+
+
+def main():
+    # 读取数据
+    if "--input" in sys.argv:
+        idx = sys.argv.index("--input")
+        with open(sys.argv[idx + 1], "r") as f:
+            issues = json.load(f)
+    else:
+        print("📡 正在从 GitHub 拉取 Issues...")
+        issues = fetch_issues()
+
+    print(f"📋 共获取到 {len(issues)} 条 Issues")
+
+    working = []
+    partial = []
+    broken = []
+
+    for issue in issues:
+        # 跳过没有 body 的
+        if not issue.get("body"):
+            continue
+
+        fields = parse_body(issue["body"])
+        name = fields.get("软件名称", "").strip()
+
+        # 跳过无软件名的（可能是 bug 报告）
+        if not name:
+            continue
+
+        chip_family = fields.get("芯片系列", "")
+        chip_variant = fields.get("芯片后缀", "")
+        chip = chip_family
+        if chip_variant and chip_variant != "标准版":
+            chip = f"{chip_family} / {chip_variant}"
+
+        entry = {
+            "name": name,
+            "type": fields.get("软件类型", ""),
+            "chip": chip,
+            "model": fields.get("机型", ""),
+            "memory": fields.get("内存", ""),
+            "yyb_version": fields.get("Mac 应用宝版本", ""),
+            "status": classify_status(fields.get("运行状态", "")),
+            "notes": fields.get("补充说明", "").replace("\n", " ")[:80],
+            "author": issue["author"]["login"],
+            "url": issue["url"],
+            "date": issue["createdAt"][:10],
+        }
+
+        if entry["status"] == "working":
+            working.append(entry)
+        elif entry["status"] == "partial":
+            partial.append(entry)
+        elif entry["status"] == "broken":
+            broken.append(entry)
+
+    # 生成 COMPAT.md
+    now = datetime.now().strftime("%Y-%m-%d")
+    total = len(working) + len(partial) + len(broken)
+
+    lines = [
+        f"# 兼容清单 ｜ Compatibility List",
+        f"",
+        f"> 最后更新 ｜ Last updated: {now} | 共 {total} 条记录 ｜ {total} entries",
+        f"> 数据来源：社区 Issue 投稿，欢迎提交 → [New Issue](https://github.com/{REPO}/issues/new?template=compat-report.yml)",
+        f"",
+        f"## ✅ 完美运行 ｜ Working ({len(working)})",
+        f"",
+        f"| 软件 ｜ App | 类型 ｜ Type | 芯片 ｜ Chip | 内存 ｜ Memory | 机型 ｜ Model | 应用宝版本 ｜ YYB | 备注 ｜ Notes | 贡献者 ｜ Contributor |",
+        f"|------|------|------|------|------|------|------|",
+    ]
+    for e in working:
+        lines.append(build_row(e))
+
+    lines += [
+        f"",
+        f"## 🔶 能跑但有瑕疵 ｜ Partial ({len(partial)})",
+        f"",
+        f"| 软件 ｜ App | 类型 ｜ Type | 芯片 ｜ Chip | 内存 ｜ Memory | 机型 ｜ Model | 应用宝版本 ｜ YYB | 备注 ｜ Notes | 贡献者 ｜ Contributor |",
+        f"|------|------|------|------|------|------|------|",
+    ]
+    for e in partial:
+        lines.append(build_row(e))
+
+    lines += [
+        f"",
+        f"## ❌ 跑不了 ｜ Broken ({len(broken)})",
+        f"",
+        f"| 软件 ｜ App | 类型 ｜ Type | 芯片 ｜ Chip | 内存 ｜ Memory | 机型 ｜ Model | 应用宝版本 ｜ YYB | 备注 ｜ Notes | 贡献者 ｜ Contributor |",
+        f"|------|------|------|------|------|------|------|",
+    ]
+    for e in broken:
+        lines.append(build_row(e))
+
+    lines += [
+        f"",
+        f"---",
+        f"*此文件由脚本自动生成，请勿手动编辑 ｜ Auto-generated by collect_issues.py, do not edit manually.*",
+    ]
+
+    with open(OUTPUT, "w") as f:
+        f.write("\n".join(lines))
+
+    print(f"✅ 已生成 {OUTPUT}")
+    print(f"   ✅ {len(working)} 条 ｜ 🔶 {len(partial)} 条 ｜ ❌ {len(broken)} 条")
+
+
+if __name__ == "__main__":
+    main()
