@@ -1,5 +1,5 @@
 name: 兼容测试报告 ｜ Compatibility Report
-description: 提交你测试过的 APK / EXE 在 Mac 应用宝上的运行情况 ｜ Report how an APK / EXE runs on Mac App Bao
+description: 提交你测试过的 APK / EXE 在 Mac 应用宝上的运行情况 ｜ Report how an APK / EXE runs on Mac 应用宝
 title: "[兼容] 软件名 - 运行状态 ｜ App Name - Status"
 labels: ["compatibility"]
 body:
@@ -102,7 +102,7 @@ body:
   - type: input
     id: yyb_version
     attributes:
-      label: Mac 应用宝版本 ｜ Mac App Bao Version
+      label: Mac 应用宝版本 ｜ Mac 应用宝 Version
       placeholder: "在关于页面查看 ｜ See About page, e.g. 0.7.9"
     validations:
       required: false
