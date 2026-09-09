@@ -97,7 +97,7 @@ body:
       label: macOS 版本 ｜ macOS Version
       placeholder: "例 ｜ e.g. 15.2"
     validations:
-      required: true
+      required: false
 
   - type: input
     id: yyb_version
@@ -105,7 +105,7 @@ body:
       label: Mac 应用宝版本 ｜ Mac App Bao Version
       placeholder: "在关于页面查看 ｜ See About page, e.g. 0.7.9"
     validations:
-      required: true
+      required: false
 
   - type: dropdown
     id: status
