@@ -1,0 +1,83 @@
+name: 兼容测试报告
+description: 提交你测试过的 APK / EXE 在 Mac 应用宝上的运行情况
+title: "[兼容] 软件名 - 运行状态"
+labels: ["compatibility"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        感谢分享你的测试结果！填写后我们会整理进兼容清单。
+
+  - type: dropdown
+    id: type
+    attributes:
+      label: 软件类型
+      options:
+        - APK（安卓应用）
+        - EXE（Windows 程序）
+    validations:
+      required: true
+
+  - type: input
+    id: name
+    attributes:
+      label: 软件名称
+      placeholder: 例：微信 / WeChat
+    validations:
+      required: true
+
+  - type: input
+    id: app_version
+    attributes:
+      label: 软件版本
+      placeholder: 例：8.0.50
+    validations:
+      required: false
+
+  - type: dropdown
+    id: chip
+    attributes:
+      label: Mac 芯片
+      options:
+        - M1
+        - M2
+        - M3
+        - M4
+    validations:
+      required: true
+
+  - type: input
+    id: macos
+    attributes:
+      label: macOS 版本
+      placeholder: 例：15.2
+    validations:
+      required: true
+
+  - type: input
+    id: yyb_version
+    attributes:
+      label: Mac 应用宝版本
+      placeholder: 在关于页面查看，例：0.7.9
+    validations:
+      required: true
+
+  - type: dropdown
+    id: status
+    attributes:
+      label: 运行状态
+      options:
+        - "✅ 完美运行"
+        - "🔶 能跑但有小问题"
+        - "❌ 跑不了"
+    validations:
+      required: true
+
+  - type: textarea
+    id: notes
+    attributes:
+      label: 补充说明
+      description: 帧率、卡顿、闪退、画面异常、对比其他方案等
+      placeholder: 例：中画质 50 帧，偶发卡顿；相比 Crossover 省心
+    validations:
+      required: false
