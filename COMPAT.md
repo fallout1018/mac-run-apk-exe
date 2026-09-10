@@ -1,13 +1,14 @@
 # 兼容清单 ｜ Compatibility List
 
-> 最后更新 ｜ Last updated: 2026-09-10 | 共 1 条记录
+> 最后更新 ｜ Last updated: 2026-09-10 | 共 2 条记录
 > 数据来源：社区 Issue 投稿 → [提交兼容报告](https://github.com/fallout1018/mac-run-apk-exe/issues/new?template=compat-report.yml)
 
-## ✅ 完美运行 ｜ Working (1)
+## ✅ 完美运行 ｜ Working (2)
 
 | 软件 | 类型 | 芯片 | 内存 | 机型 | 应用宝版本 | 备注 | 贡献者 |
 |------|------|------|------|------|-----------|------|----------|
 | 红果短剧 | APK/安卓应用 | M1 | 8G | MacBook Air | - | 完美运行，摸鱼刷起来 | @fallout1018 |
+| TBH: 塔斯克巴·英雄 | EXE（Windows 程序） | M1 / Pro | 16G | MacBook Pro | - | 完美，可挂机，目前只有这个模拟器可以实现背景透明，和 win 体验一样 | @fallout1018 |
 
 
 ## 🔶 能跑但有瑕疵 ｜ Partial (0)
