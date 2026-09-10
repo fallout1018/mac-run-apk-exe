@@ -68,6 +68,11 @@
 下面是当前验证**完美运行**的前几条预览（完整 ✅ / 🔶 / ❌ 分类见 [COMPAT.md](./COMPAT.md)）：
 
 <!-- COMPAT_PREVIEW:start -->
+#### ✅ 完美运行（预览）｜ Working (preview)
+
+| 软件 | 类型 | 芯片 | 内存 | 机型 | 应用宝版本 | 备注 | 贡献者 |
+|------|------|------|------|------|------------|------|----------|
+| 开罗游戏 | EXE（Windows 程序） | M2 / 标准版 ｜ Standard | 8G | MacBook Air | Mac 应用宝 Version | _No response_ | @1955-art || 红果短剧 | APK（安卓应用 ｜ Android） | M1 / 标准版 ｜ Standard | 8G | MacBook Air | Mac 应用宝 Version | 完美运行，摸鱼刷起来 | @fallout1018 || Age of Empires II: Definitive Edition/帝国时代 2 决定版 | EXE（Windows 程序） | M1 / Pro | 16G | MacBook Pro | Mac 应用宝 Version | _No response_ | @fallout1018 || Split Fiction/双影奇境 | EXE（Windows 程序） | M1 / Pro | 16G | MacBook Pro | Mac 应用宝 Version | _No response_ | @fallout1018 || Subnautica 2/深海迷航 2 | EXE（Windows 程序） | M4 / Pro | 24G | MacBook Pro | Mac 应用宝 Version | _No response_ | @fallout1018 |
 <!-- COMPAT_PREVIEW:end -->
 
 ### 🤝 怎么贡献 ｜ How to contribute
