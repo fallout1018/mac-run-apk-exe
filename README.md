@@ -39,13 +39,24 @@
 
 ---
 
+## 📦 获取安装包 ｜ Get the Installer
+
+👉 **[GitHub Releases](https://github.com/fallout1018/mac-run-apk-exe/releases)** — 下载最新版 Mac 应用宝（备份镜像）
+
+👉 **[官网 ｜ Official](https://sj.qq.com/download/macbrand)** — 始终以官网为准 ｜ Always get the official one first
+
+> 安装后跑一下你的 APK / EXE，来 [提交兼容报告](https://github.com/fallout1018/mac-run-apk-exe/issues/new?template=compat-report.yml) 帮大家建清单 🫡
+> After installing, run your APK / EXE and [submit a compat report](https://github.com/fallout1018/mac-run-apk-exe/issues/new?template=compat-report.yml) to help build the list.
+
+---
+
 ## 最新版本 ｜ Latest Version
 
-| 版本 ｜ Version | 日期 ｜ Date | 下载 ｜ Download | SHA256 |
+| 版本 ｜ Version | 日期 ｜ Date | 下载 ｜ Download |
 |------|------|------|--------|
-| 0.7.9 | 2026-09-04 | [官网 ｜ Official](https://sj.qq.com/download/macbrand) | *(以官网为准 ｜ see official site)* |
+| 0.7.9 | 2026-09-04 | [**GitHub Releases**](https://github.com/fallout1018/mac-run-apk-exe/releases/download/release/macyyb-0.7.9-2112.zip) | [📦 下载 ｜ Download](https://github.com/fallout1018/mac-run-apk-exe/releases/download/release/macyyb-0.7.9-2112.zip) |
 
-> ⚠️ 安装包请以官网为准，不定期搬运。 ｜ Always get the installer from the official site. Mirroring occasionally.
+> ⚠️ 安装包请以官网为准，Releases 仅作备份镜像。 ｜ Always get the installer from the official site. Releases are provided as a backup mirror.
 
 ---
 
@@ -57,11 +68,6 @@
 下面是当前验证**完美运行**的前几条预览（完整 ✅ / 🔶 / ❌ 分类见 [COMPAT.md](./COMPAT.md)）：
 
 <!-- COMPAT_PREVIEW:start -->
-#### ✅ 完美运行（预览）｜ Working (preview)
-
-| 软件 | 类型 | 芯片 | 内存 | 机型 | 应用宝版本 | 备注 | 贡献者 |
-|------|------|------|------|------|------------|------|----------|
-| 红果短剧 | APK（安卓应用 ｜ Android） | M1 / 标准版 ｜ Standard | 8G | MacBook Air | Mac 应用宝 Version | 完美运行，摸鱼刷起来 | @fallout1018 || TBH: 塔斯克巴·英雄 | EXE（Windows 程序） | M1 / Pro | 16G | MacBook Pro | Mac 应用宝 Version | 完美，可挂机，目前只有这个模拟器可以实现背景透明，和 win 体验一样 | @fallout1018 |
 <!-- COMPAT_PREVIEW:end -->
 
 ### 🤝 怎么贡献 ｜ How to contribute
@@ -76,6 +82,7 @@
 
 ## 相关链接 ｜ Related Links
 
+- 📦 Releases ｜ 安装包备份：[GitHub Releases](https://github.com/fallout1018/mac-run-apk-exe/releases)
 - 官网 ｜ Official site：https://sj.qq.com/download/macbrand
 - 官方客服 ｜ Official support：https://kf.qq.com/
 
