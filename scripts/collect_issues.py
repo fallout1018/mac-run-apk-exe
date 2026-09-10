@@ -1,274 +1,369 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
-collect_issues.py - 从 GitHub Issues 汇总兼容报告到 COMPAT.md
+collect_issues.py - 从 GitHub Issues 汇总兼容报告，生成 COMPAT.md 并同步 README 预览
 用法：python3 scripts/collect_issues.py
 
-v2：
-- 直接用 `gh issue list --json` 拉取（避免手写 REST URL 拼错）
-- 兼容「字段名 ｜ English」双行模板的正文解析
-- 备注优先取「性能/画质/帧率」，其次「补充说明」
-- 支持合并 Issue 评论
+依赖：gh CLI（已登录：gh auth login）、python3
 """
-
+import os
+import re
+import sys
 import json
 import subprocess
-import sys
-import re
 from datetime import datetime
 
+# ==================== 配置 ====================
 REPO = "fallout1018/mac-run-apk-exe"
-OUTPUT = "COMPAT.md"
+OUT_FILE = "COMPAT.md"
 
-# 如果你想只抓带特定 label 的 issue，改成 True；否则抓全部 open issue
+# 开关：
+#   FILTER_BY_LABEL = True  时，只抓带 LABEL 标签的 Issue
+#   FILTER_BY_LABEL = False 时，抓所有 open Issue，靠标题里的 [兼容] 过滤
 FILTER_BY_LABEL = False
 LABEL = "兼容"
 
+# README 首页「完美运行」预览条数；设为 0 = 只放跳转链接不放表
+PREVIEW_LIMIT = 5
 
-def run(cmd):
-    r = subprocess.run(cmd, capture_output=True, text=True)
-    if r.returncode != 0:
-        print(f"⚠️  命令失败: {cmd}\n{r.stderr}", file=sys.stderr)
-    return r.stdout
+# gh issue list --json 请求的字段（必须全部在可用字段列表内：author/body/createdAt/labels/number/state/title/url ...）
+# 注意：是 "url"，不是 "html_url"
+JSON_FIELDS = "number,title,body,state,createdAt,author,labels,url"
+
+SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
+ROOT_DIR = os.path.dirname(SCRIPT_DIR)
+
+
+# ==================== 工具 ====================
+def run_cmd(cmd):
+    """执行命令并返回 stdout；失败时打印 stderr 并返回空字符串"""
+    try:
+        r = subprocess.run(cmd, shell=True, capture_output=True, text=True)
+        if r.returncode != 0:
+            print(f"⚠️ 命令失败: {cmd}\n{r.stderr.strip()}")
+            return ""
+        return r.stdout
+    except Exception as e:
+        print(f"⚠️ 执行异常: {e}")
+        return ""
 
 
 def fetch_issues():
-    """用 gh issue list 拉取，稳定且无需拼 URL。"""
-    cmd = [
-        "gh", "issue", "list",
-        "--repo", REPO,
-        "--state", "all",
-        "--limit", "500",
-        "--json", "number,title,body,state,createdAt,author,labels,url,comments",
-    ]
+    """拉取 Issues 列表"""
     if FILTER_BY_LABEL:
-        cmd += ["--label", LABEL]
-    out = run(cmd)
-    if not out.strip():
+        q = f'gh issue list --repo "{REPO}" --label "{LABEL}" --state all --limit 500 --json {JSON_FIELDS}'
+    else:
+        q = f'gh issue list --repo "{REPO}" --state all --limit 500 --json {JSON_FIELDS}'
+    out = run_cmd(q)
+    if not out:
         return []
-    return json.loads(out)
+    try:
+        return json.loads(out)
+    except json.JSONDecodeError as e:
+        print(f"⚠️ JSON 解析失败: {e}\n原始输出: {out[:300]}")
+        return []
+
+
+def fetch_comments(issue_number):
+    """拉取某 Issue 的评论（用于补充字段）"""
+    out = run_cmd(f'gh api repos/{REPO}/issues/{issue_number}/comments')
+    if not out:
+        return []
+    try:
+        return json.loads(out)
+    except json.JSONDecodeError:
+        return []
 
 
 def clean(v):
+    """清洗字段值：去 markdown 加粗、去首尾空白、把 No response 当空"""
     if v is None:
         return ""
-    v = str(v).strip()
-    if v.lower() in ("no response", "(no response)", "_no response_", "?"):
+    s = str(v).strip()
+    s = s.replace("**", "").replace("*", "")
+    if s.lower() in ("no response", "(no response)", "_no response_", "?", "none"):
         return ""
-    return re.sub(r"[✅🔶❌]", "", v).strip()
+    return s
+
+
+def is_heading(text):
+    """判断一行是否是「字段标题行」。
+
+    GitHub 表单的标题行一定是「**加粗 ｜ 英文**」格式，所以判定规则：
+      1. 整行被 **...** 包裹（去掉首尾 ** 后仍有内容）
+      2. 去掉 ** 后含至少一个中文字符
+    这样可避免把纯值行（如「红果短剧」「完美运行，摸鱼刷起来」）误判成标题。
+    """
+    t = text.strip()
+    if not t.startswith("**") or not t.endswith("**"):
+        return False
+    inner = t[2:-2].strip()
+    if not inner:
+        return False
+    return bool(re.search(r"[\u4e00-\u9fff]", inner))
 
 
 def parse_body(body):
-    """解析 GitHub 模板正文。
-
-    支持 GitHub 渲染出的所有格式（均实测覆盖）：
-      · **软件名称 ｜ App Name**          ← 加粗标题行（无值）
-       红果短剧                       ← 下一行是值
-      · **运行状态 ｜ Status**: ✅ 完美运行 ｜ Works perfectly   ← 标题与值同行
-      · ### 字段 ｜ English\n值        ← 三级标题 + 值
-      · 字段: 值  /  字段 ｜ 值         ← 纯单行
-
-    规则：标题行 = 去掉 ** / ### 后「含 ｜（中文 ｜ English）」的行；
-    值 = 标题行冒号后（同行），或下一行起直到下一个标题行。
-    """
+    """解析 Issue 正文（GitHub 加粗双行格式），返回字段字典"""
     fields = {}
     if not body:
         return fields
 
-    def is_heading_line(stripped):
-        """判断一行是否是「字段标题行」。"""
-        if not stripped:
-            return False
-        if stripped.startswith("###"):
-            return True
-        # 去掉两端 **，看是否含 「中文 ｜ English」
-        core = stripped.strip("*").strip()
-        if "｜" in core or "|" in core:
-            # ｜ 左右都有内容，且左侧以中文/字母开头
-            parts = re.split(r"\s*[|｜]\s*", core, maxsplit=1)
-            if len(parts) == 2 and parts[0].strip() and re.search(r"[\u4e00-\u9fa5A-Za-z]", parts[0]):
-                return True
-        return False
-
-    def key_of(stripped):
-        """从标题行抽出纯中文键名（去掉 **、###、英文翻译）。"""
-        core = stripped.strip("*").strip()
-        core = re.sub(r"^#{1,6}\s*", "", core).strip()
-        core = re.split(r"\s*[|｜]\s*", core)[0].strip().strip("*").strip()
-        return core
-
-    lines = [l.strip() for l in body.splitlines()]
-    cur_key = None
-    buf = []
-
-    def flush():
-        nonlocal cur_key, buf
-        if cur_key is None:
-            return
-        if cur_key not in fields and buf:
-            val = " ".join(buf).strip()
-            val = re.sub(r"[✅🔶❌]", "", val).strip()
-            if val and val.lower() != "no response":
-                fields[cur_key] = val
-        cur_key, buf = None, []
-
+    # —— 策略 1：按行解析（兼容双行 + 同行值）——
+    lines = body.splitlines()
     i = 0
     while i < len(lines):
-        line = lines[i]
-        if not line:
-            i += 1
-            continue
-        if is_heading_line(line):
-            # 保存上一字段
-            flush()
-            key = key_of(line)
-            # 同行「键: 值」（冒号后的值，含 ｜ English 同行情况）
-            core = line.strip("*").strip()
-            core = re.sub(r"^#{1,6}\s*", "", core).strip()
-            # 只取「第一个 ｜ 或 :」之后的内容作为同行值候选
-            m = re.match(r"^.*?[|:：]\s*(.+)$", core)
-            if m:
-                same = m.group(1).strip().strip("*")
-                # 同行值形如 「✅ 完美运行 ｜ Works perfectly」，取中文段
-                v = re.split(r"\s*[|｜]\s*", same)[0].strip()
-                v = re.sub(r"[✅🔶❌]", "", v).strip()
-                if v and v.lower() != "no response":
-                    fields[key] = v
-                    cur_key, buf = None, []
+        line = lines[i].strip()
+        if is_heading(line):
+            # 值可能在同行（末尾 : 值）或下一行
+            val = ""
+            # 同行值：**运行状态 ｜ Status**: ✅ 完美运行
+            m = re.match(r"^.*?[:：]\s*(.+)$", line)
+            if m and not line.endswith((":", "：")):
+                val = m.group(1).strip()
+            # 下一行值
+            if not val and i + 1 < len(lines):
+                nxt = lines[i + 1].strip()
+                if nxt and not is_heading(nxt) and not nxt.startswith("###"):
+                    val = nxt
                     i += 1
-                    continue
-            cur_key, buf = key, []
-        else:
-            if cur_key is not None:
-                buf.append(line)
+            key = line.replace("**", "").strip()
+            fields[key] = val
         i += 1
-    flush()
-    return fields
+
+    # —— 策略 2：精确键名映射（脚本内部用的统一键）——
+    def g(*candidates, default=""):
+        """按候选标题子串查找值，返回清洗后的结果；找不到返回 default"""
+        for cand in candidates:
+            for k, v in fields.items():
+                # 精确匹配标题，或标题包含候选词
+                if k == cand or cand.lower() in k.lower():
+                    cv = clean(v)
+                    if cv:
+                        return cv
+        return default
+
+    return {
+        "name": g("软件名称", "App Name"),
+        "type": g("软件类型", "App Type", default="APK/安卓应用"),
+        "chip": g("芯片系列", "Chip Family"),
+        "chip_variant": g("芯片后缀", "Chip Variant"),
+        "memory": g("内存", "Memory"),
+        "model": g("机型", "Model"),
+        "yyb": g("Mac 应用宝版本", "Mac 应用宝 Version", "应用宝版本", "Version"),
+        "status_raw": g("运行状态", "Status"),
+        "perf": g("性能", "帧率", "Performance"),
+        "notes": g("补充说明", "Notes"),
+    }
 
 
 def merge_comments(issue, fields):
-    """把 Issue 的评论正文也当作补充来源。"""
-    for c in issue.get("comments", []):
-        cf = parse_body(c.get("body", ""))
-        for k, v in cf.items():
-            if clean(v) and not clean(fields.get(k)):
-                fields[k] = v
+    """用评论内容补充正文缺失的字段"""
+    try:
+        comments = fetch_comments(issue.get("number"))
+        for c in comments:
+            cf = parse_body(c.get("body", ""))
+            for k, v in cf.items():
+                if v and not fields.get(k):
+                    fields[k] = v
+    except Exception:
+        pass
     return fields
 
 
 def classify_status(text):
-    t = clean(text).lower()
-    if "瑕疵" in t or "partial" in t or "部分" in t:
+    """根据正文/标题判断运行状态"""
+    t = (text or "").lower()
+    if "🔶" in text or "瑕疵" in text or "partial" in t or "部分" in t:
         return "partial"
-    if "跑不了" in t or "broken" in t or "失败" in t:
+    if "❌" in text or "跑不了" in text or "broken" in t or "失败" in t:
         return "broken"
-    return "working"
+    return "working"  # 默认完美运行
 
 
 def build_entry(issue):
-    body = issue.get("body", "") or ""
-    fields = parse_body(body)
+    """把一个 Issue 转成表格行字典"""
+    fields = parse_body(issue.get("body", ""))
     fields = merge_comments(issue, fields)
 
     title = issue.get("title", "") or ""
 
-    # 兜底：从标题提取软件名
-    if not clean(fields.get("软件名称")) and not clean(fields.get("App Name")):
-        m = re.search(r"\[(兼容|测试)\]\s*(.+?)(?:\s*-\s*|$)", title)
+    # 软件名兜底：从标题 [兼容] 红果短剧 - 完美运行 提取
+    name = fields.get("name") or ""
+    if not name:
+        m = re.search(r"\[\s*兼容\s*\]\s*(.+?)(?:\s*-\s*|\s*$)", title)
         if m:
-            fields["软件名称"] = m.group(2).strip()
-    # 兜底：从标题推断状态
-    if not clean(fields.get("运行状态")):
-        fields["运行状态"] = title
+            name = m.group(1).strip()
+    if not name:
+        name = title.split("-")[0].strip().strip("[]")
+    name = clean(name) or "?"
 
-    # 英文「键名翻译」占位黑名单：值若等于这些词才算占位
-    _VAL_BLACKLIST = (
-        "no response", "app name", "app type", "chip family", "chip variant",
-        "model", "memory", "status", "performance", "notes", "type", "name",
-    )
+    # 运行状态兜底
+    status_raw = fields.get("status_raw") or ""
+    if not status_raw:
+        status_raw = title
+    status = classify_status(status_raw)
 
-    def good(v):
-        """判断一个候选值是否是真实内容（排除英文占位与空值）。"""
-        vv = clean(v)
-        if not vv:
-            return False
-        low = vv.lower()
-        # 只有「值本身等于某个英文键名」（如 "Model"、"Chip Family"）才算占位
-        if low in _VAL_BLACKLIST:
-            return False
-        return True
-
-    def g(*keys):
-        # 1) 精确匹配
-        for k in keys:
-            v = fields.get(k)
-            if good(v):
-                return clean(v)
-        # 2) 包含匹配（兼容「软件名称 ｜ App Name」这类带英文后缀的键）
-        for stored_key, v in fields.items():
-            if not good(v):
-                continue
-            for k in keys:
-                if k and (k in stored_key or stored_key.rstrip("s") == k):
-                    return clean(v)
-        return ""
-
-    name = g("软件名称", "App Name") or "?"
-    typ = g("软件类型", "App Type") or "APK/安卓应用"
-    chip_family = g("芯片系列", "Chip Family")
-    chip_variant = g("芯片后缀", "Chip Variant")
-    chip = chip_family
-    if chip and chip_variant and chip_variant != "标准版":
+    # 芯片：系列 + 后缀（如 M2 + Pro -> M2 / Pro）
+    chip = clean(fields.get("chip")) or "?"
+    chip_variant = clean(fields.get("chip_variant"))
+    if chip_variant and chip_variant not in ("标准版", "Standard", "?"):
         chip = f"{chip} / {chip_variant}"
-    chip = chip or "?"
 
-    memory = g("内存", "Memory") or "?"
-    model = g("机型", "Model") or "?"
-    yyb = g("Mac 应用宝版本", "应用宝版本", "Mac Version")
+    # 备注：优先「性能/画质/帧率」，其次「补充说明」
+    notes = clean(fields.get("perf")) or clean(fields.get("notes")) or "-"
+    notes = notes.replace("\n", " ")[:80]
 
-    notes = g("性能 / 画质 / 帧率（可选）", "性能", "补充说明", "Notes") or "-"
+    # 贡献者：author（gh issue list 字段是 author，不是 user）
+    author = issue.get("author") or issue.get("user") or {}
+    if isinstance(author, dict):
+        login = author.get("login", "?")
+    else:
+        login = str(author)
+    contributor = "@" + login
 
     return {
         "name": name,
-        "type": typ,
+        "type": clean(fields.get("type")) or "APK/安卓应用",
         "chip": chip,
-        "memory": memory,
-        "model": model,
-        "yyb": yyb,
-        "status": classify_status(g("运行状态", "Status")),
-        "notes": notes.replace("\n", " ")[:80],
-        "author": issue.get("author", {}).get("login", issue.get("user", {}).get("login", "?")),
+        "memory": clean(fields.get("memory")) or "?",
+        "model": clean(fields.get("model")) or "?",
+        "yyb": clean(fields.get("yyb")) or "",
+        "status": status,
+        "notes": notes,
+        "contributor": contributor,
     }
 
 
+# ==================== 渲染 ====================
 def md_table(rows):
-    """8 列表格：软件 类型 芯片 内存 机型 应用宝版本 备注 贡献者"""
+    """渲染 8 列表格（表头 + 数据行对齐）"""
     head = (
         "| 软件 | 类型 | 芯片 | 内存 | 机型 | 应用宝版本 | 备注 | 贡献者 |\n"
-        "|------|------|------|------|------|-----------|------|----------|\n"
+        "|------|------|------|------|------|-----------|------|--------|\n"
     )
+    body = ""
     for r in rows:
-        head += (
+        yyb = r["yyb"] if r["yyb"] else "-"
+        body += (
             f"| {r['name']} | {r['type']} | {r['chip']} | {r['memory']} "
-            f"| {r['model']} | {r['yyb'] or '-'} | {r['notes']} | @{r['author']} |\n"
+            f"| {r['model']} | {yyb} | {r['notes']} | {r['contributor']} |\n"
         )
-    return head
+    return head + body
 
 
+def build_compat_md(working, partial, broken):
+    """生成完整 COMPAT.md 内容"""
+    now = datetime.now().strftime("%Y-%m-%d")
+    total = len(working) + len(partial) + len(broken)
+    out = []
+    out.append("# 兼容清单 ｜ Compatibility List")
+    out.append("")
+    out.append(f"> 最后更新 ｜ Last updated: {now} · 共 {total} 条记录")
+    out.append(f"> 数据来源：社区 Issue 投稿 → [提交兼容报告](https://github.com/{REPO}/issues/new?template=compat-report.yml)")
+    out.append("")
+    out.append(f"## ✅ 完美运行 ｜ Working ({len(working)})")
+    out.append("")
+    out.append(md_table(working))
+    out.append("")
+    out.append(f"## 🔶 能跑但有瑕疵 ｜ Partial ({len(partial)})")
+    out.append("")
+    out.append(md_table(partial))
+    out.append("")
+    out.append(f"## ❌ 跑不了 ｜ Broken ({len(broken)})")
+    out.append("")
+    out.append(md_table(broken))
+    out.append("")
+    out.append("---")
+    out.append("*此文件由脚本自动生成，请勿手动编辑 ｜ Auto-generated by collect_issues.py*")
+    return "\n".join(out)
+
+
+# ==================== README 预览注入 ====================
+def update_readme_preview(compat_md, readme_path, limit=PREVIEW_LIMIT):
+    """把「完美运行」前 limit 条注入 README 的 COMPAT_PREVIEW 标记区间"""
+    if not os.path.exists(readme_path):
+        print(f"⚠️ 未找到 README: {readme_path}（跳过预览更新）")
+        return
+
+    # 从 compat_md 里抽取 working 表格行（跳过表头前两行）
+    lines = compat_md.splitlines()
+    table_rows = []
+    in_working = False
+    for ln in lines:
+        if ln.startswith("## ✅"):
+            in_working = True
+            continue
+        if in_working:
+            if ln.startswith("## ") or ln.startswith("---"):
+                break
+            if ln.startswith("|") and "软件" not in ln and "------" not in ln:
+                table_rows.append(ln)
+
+    preview = table_rows[:limit] if limit > 0 else []
+    if limit > 0 and not preview:
+        preview = table_rows  # 没有足够条数就用全部
+
+    if limit == 0 or not preview:
+        block = (
+            "> 📊 完整兼容清单见 **[COMPAT.md](./COMPAT.md)** —— "
+            "哪些 APK / EXE 能跑、跑得怎么样，**大家共同维护**。\n"
+        )
+    else:
+        head = "| 软件 | 类型 | 芯片 | 内存 | 机型 | 备注 | 贡献者 |\n|------|------|------|------|------|------|--------|\n"
+        body = "\n".join(preview)
+        block = (
+            f"> 📊 完整清单见 **[COMPAT.md](./COMPAT.md)**（共 ✅{len(table_rows)} 条完美运行）\n\n"
+            + head + body + "\n\n"
+            + "> 想加入？[提交一条兼容报告](https://github.com/{REPO}/issues/new?template=compat-report.yml) 即可。\n".format(REPO=REPO)
+        )
+
+    start_marker = "<!-- COMPAT_PREVIEW:start -->"
+    end_marker = "<!-- COMPAT_PREVIEW:end -->"
+    with open(readme_path, "r", encoding="utf-8") as f:
+        content = f.read()
+
+    if start_marker not in content or end_marker not in content:
+        print(f"⚠️ README 未找到 {start_marker} / {end_marker} 标记，跳过注入")
+        return
+
+    pre = content.split(start_marker)[0]
+    post = content.split(end_marker)[-1]
+    new_content = pre + start_marker + "\n\n" + block + "\n" + end_marker + post
+
+    with open(readme_path, "w", encoding="utf-8") as f:
+        f.write(new_content)
+    print(f"✅ 已更新 README.md 兼容预览（{len(preview)} 条）")
+
+
+# ==================== 主流程 ====================
 def main():
-    print("📡 正在从 GitHub 拉取 Issues...")
-    issues = fetch_issues()
-    print(f"📋 共获取到 {len(issues)} 条 Issues")
+    print("📦 正在从 GitHub 拉取 Issues...")
 
-    (working, partial, broken) = ([], [], [])
-    for iss in issues:
+    raw_issues = fetch_issues()
+    # 兼容两种数据结构：list，或 {"items": [...]}
+    if isinstance(raw_issues, dict):
+        raw_issues = raw_issues.get("items", [])
+
+    # 过滤：标题含 [兼容]（FILTER_BY_LABEL=False 时）；排除 PR
+    issues = []
+    for iss in raw_issues:
         if iss.get("pull_request"):
             continue
-        # 若没开 FILTER_BY_LABEL，则在这里按标题过滤兼容报告
-        title = iss.get("title", "")
+        title = iss.get("title", "") or ""
         if not FILTER_BY_LABEL and "[兼容]" not in title:
             continue
-        entry = build_entry(iss)
+        issues.append(iss)
+
+    print(f"📋 共获取到 {len(issues)} 条 Issues")
+
+    working, partial, broken = [], [], []
+    for iss in issues:
+        try:
+            entry = build_entry(iss)
+        except Exception as e:
+            print(f"⚠️ 解析 Issue #{iss.get('number')} 失败: {e}")
+            continue
         if entry["status"] == "partial":
             partial.append(entry)
         elif entry["status"] == "broken":
@@ -279,36 +374,18 @@ def main():
     for lst in (working, partial, broken):
         lst.sort(key=lambda x: (x["model"], x["name"]))
 
-    now = datetime.now().strftime("%Y-%m-%d")
-    total = len(working) + len(partial) + len(broken)
+    compat_md = build_compat_md(working, partial, broken)
 
-    out = [
-        "# 兼容清单 ｜ Compatibility List",
-        "",
-        f"> 最后更新 ｜ Last updated: {now} | 共 {total} 条记录",
-        f"> 数据来源：社区 Issue 投稿 → [提交兼容报告](https://github.com/{REPO}/issues/new?template=compat-report.yml)",
-        "",
-        f"## ✅ 完美运行 ｜ Working ({len(working)})",
-        "",
-        md_table(working),
-        "",
-        f"## 🔶 能跑但有瑕疵 ｜ Partial ({len(partial)})",
-        "",
-        md_table(partial),
-        "",
-        f"## ❌ 跑不了 ｜ Broken ({len(broken)})",
-        "",
-        md_table(broken),
-        "",
-        "---",
-        "*此文件由脚本自动生成，请勿手动编辑 ｜ Auto-generated by collect_issues.py*",
-    ]
-
-    with open(OUTPUT, "w", encoding="utf-8") as f:
-        f.write("\n".join(out))
-
-    print(f"✅ 已生成 {OUTPUT}")
+    # 写 COMPAT.md
+    compat_path = os.path.join(ROOT_DIR, OUT_FILE)
+    with open(compat_path, "w", encoding="utf-8") as f:
+        f.write(compat_md)
+    print(f"✅ 已生成 {OUT_FILE}")
     print(f"   ✅ {len(working)} ｜ 🔶 {len(partial)} ｜ ❌ {len(broken)}")
+
+    # 同步 README 预览
+    readme_path = os.path.join(ROOT_DIR, "README.md")
+    update_readme_preview(compat_md, readme_path, limit=PREVIEW_LIMIT)
 
 
 if __name__ == "__main__":
