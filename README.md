@@ -68,7 +68,7 @@
 
 1. 点开 [Issues](https://github.com/fallout1018/mac-run-apk-exe/issues) → **「兼容测试报告」**
 2. 按模板填：软件名 / 芯片 / 机型 / 内存 / 运行状态
-3. 提交后脚本自动把它加进 [COMPAT.md](./COMPAT.md)
+3. 提交后我会定期运行脚本自动把它加进 [COMPAT.md](./COMPAT.md)
 
 > 你的实测 = 别人的避雷指南 ⭐
 
