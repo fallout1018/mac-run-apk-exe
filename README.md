@@ -57,16 +57,11 @@
 下面是当前验证**完美运行**的前几条预览（完整 ✅ / 🔶 / ❌ 分类见 [COMPAT.md](./COMPAT.md)）：
 
 <!-- COMPAT_PREVIEW:start -->
+#### ✅ 完美运行（预览）｜ Working (preview)
 
-> 📊 完整清单见 **[COMPAT.md](./COMPAT.md)**（共 ✅2 条完美运行）
-
-| 软件 | 类型 | 芯片 | 内存 | 机型 | 备注 | 贡献者 |
-|------|------|------|------|------|------|--------|
-| TBH: 塔斯克巴·英雄 | APK/安卓应用 | ? | ? | ? | - | - | @fallout1018 |
-| 红果短剧 | APK/安卓应用 | ? | ? | ? | - | - | @fallout1018 |
-
-> 想加入？[提交一条兼容报告](https://github.com/fallout1018/mac-run-apk-exe/issues/new?template=compat-report.yml) 即可。
-
+| 软件 | 类型 | 芯片 | 内存 | 机型 | 应用宝版本 | 备注 | 贡献者 |
+|------|------|------|------|------|------------|------|----------|
+| 红果短剧 | APK（安卓应用 ｜ Android） | M1 / 标准版 ｜ Standard | 8G | MacBook Air | Mac 应用宝 Version | 完美运行，摸鱼刷起来 | @fallout1018 || TBH: 塔斯克巴·英雄 | EXE（Windows 程序） | M1 / Pro | 16G | MacBook Pro | Mac 应用宝 Version | 完美，可挂机，目前只有这个模拟器可以实现背景透明，和 win 体验一样 | @fallout1018 |
 <!-- COMPAT_PREVIEW:end -->
 
 ### 🤝 怎么贡献 ｜ How to contribute
